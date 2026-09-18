@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.15)
+project(ShadowWeaver LANGUAGES CXX)
+
+# Set global C++ standard requirements for the project
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Compile ShadowWeaver ONLY if the target operating system is Windows
+if(WIN32)
+    message(STATUS "[+] Windows host identified. Generating ShadowWeaver compilation profiles.")
+
+    # Create the executable binary
+    add_executable(ShadowWeaver main.cpp)
+
+    # Force x64 architectural targeting constraints
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(STATUS "[+] Targeting 64-bit architecture successfully.")
+    else()
+        message(FATAL_ERROR "[-] ShadowWeaver requires a 64-bit Windows compilation target context.")
+    endif()
+
+    # Enforce static runtime linkage options so the binary runs cleanly on target hosts
+    set_target_properties(ShadowWeaver PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+
+    # Apply linking rules for subsystem execution layouts
+    target_link_libraries(ShadowWeaver PRIVATE ntdll kernel32 user32)
+
+else()
+    # Gracefully bypass building on Linux/Mac platforms inside GitHub Actions
+    message(WARNING "[-] Non-Windows OS detected (${CMAKE_SYSTEM_NAME}). ShadowWeaver architecture skipped.")
+endif()
