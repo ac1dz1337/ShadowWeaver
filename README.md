@@ -37,6 +37,8 @@ During execution, a manual trace reveals a flawless, fully-signed module topolog
 08 ntdll!RtlUserThreadStart+0x21     <-- Subsystem primary thread entry point
 ```
 
+For custom project you can contact me at .yatzu on discord
+
 ## Compilation Instructions
 
 - **IDE:** Visual Studio 2022+
